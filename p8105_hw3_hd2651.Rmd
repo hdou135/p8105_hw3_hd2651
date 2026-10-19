@@ -1,0 +1,8 @@
+---
+title: "Homework 3"
+author: "Haoyuan Dou"
+date: "2026-10-19"
+output: github_document
+---
+
+
