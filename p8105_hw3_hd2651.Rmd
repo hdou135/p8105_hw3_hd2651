@@ -5,4 +5,300 @@ date: "2026-10-19"
 output: github_document
 ---
 
+# Problem 1 
+```{r}
+library(tidyverse)
+library(p8105.datasets)
+library(patchwork)
+data("ny_noaa")
+```
 
+```{r}
+glimpse(ny_noaa)
+head(ny_noaa)
+colSums(is.na(ny_noaa))
+n_distinct(ny_noaa$id)
+range(ny_noaa$date)
+round(colMeans(is.na(ny_noaa)) * 100, 2)
+```
+
+The ny-noaa data set contains 2595176 observations and 7 variables from 747 weather stations in New York State between 1981 and 2010. The main variables include precipitation (prcp), snowfall (snow), snow depth (snwd), maximum temperature (tmax), and minimum temperature (tmin). Precipitation is measured in tenths of a millimeter, and temperatures are measured in tenths of a degree Celsius. Snowfall and snow depth are already in millimeters.
+
+There are many missing values in this data set. About 43.71% of observations are missing for both maximum and minimum temperatures. Snowfall and snow depth have 14.69% and 22.80% missing values, respectively, while precipitation has about 5.62%. One possible reason is that not all weather stations collect every type of measurement.
+
+```{r}
+noaa_df = ny_noaa |>
+  mutate(
+    year = year(date),
+    month = month(date),
+    day = day(date),
+    prcp = prcp / 10,
+    tmax = as.numeric(tmax) / 10,
+    tmin = as.numeric(tmin) / 10
+  )
+
+glimpse(noaa_df)
+head(noaa_df)
+```
+
+```{r}
+noaa_df |>
+  count(snow, sort = TRUE) |>
+  head(10)
+
+noaa_df |>
+  filter(!is.na(snow)) |>
+  count(snow, sort = TRUE) |>
+  head(10)
+```
+
+The most common snowfall value is 0 mm, which appears 2008508 times. This makes sense because most days do not have snowfall. Other common values include 25, 13, 51, and 76mm. These values are close to 1, 0.5, 2, and 3 inches, respectively. I think these values may come from measurements in inches that were later converted to millimeters.
+
+```{r}
+temp_df = noaa_df |>
+  filter(month %in% c(1, 7), !is.na(tmax)) |>
+  group_by(id, year, month) |>
+  summarize(
+    mean_tmax = mean(tmax),
+    .groups = "drop"
+  )
+
+glimpse(temp_df)
+head(temp_df)
+```
+
+```{r fig.width=10, fig.height=5}
+temp_df |>
+  mutate(
+    month = factor(month,
+                   levels = c(1, 7),
+                   labels = c("January", "July"))
+  ) |>
+  ggplot(aes(x = year, y = mean_tmax)) + 
+  geom_point(alpha = 0.2) +
+  facet_grid(. ~ month) +
+  labs(
+    title = "Average Maximum Temperature in January and July",
+    x = "Year",
+    y = "Average Maximum Temperature"
+  ) +
+  theme_minimal()
+```
+
+January and July have very different temperatues, with July being much warmer. Temperatures vary across years, but there is no clear increasing or decreasing trend. One possible outlier is station USC00308962 in July 1988, with an average maximum temperature of about 13.95°C. This station has temperature records for all 31 days in July, so the low average is not due to missing daily observations.
+
+```{r}
+temp_df |>
+  filter(month == 7) |>
+  arrange(mean_tmax) |>
+  head(10)
+```
+
+```{r}
+noaa_df |>
+  filter(
+    id == "USC00308962",
+    year == 1988,
+    month == 7,
+    !is.na(tmax)
+  ) |>
+  summarize(
+    n_days = n(),
+    mean_tmax = mean(tmax)
+  )
+```
+
+```{r}
+tmax_tmin_plot = noaa_df |>
+  filter(!is.na(tmax), !is.na(tmin)) |>
+  ggplot(aes(x = tmin, y = tmax)) +
+  geom_bin2d(bins = 50) +
+  labs(
+    title = "Maximum vs Minimum Temperature",
+    x = "Minimum Temperature",
+    y = "Maximum Temperature",
+    fill = "Count"
+  ) +
+  theme_minimal()
+```
+```{r}
+snow_plot = noaa_df |>
+  filter(snow > 0, snow < 100) |>
+  ggplot(aes(x = factor(year), y = snow)) +
+  geom_boxplot() +
+  labs(
+    title = "Snowfall Distribution by Year",
+    x = "Year",
+    y = "Snowfall"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  )
+```
+
+```{r fig.width=14, fig.height=6}
+tmax_tmin_plot + snow_plot
+```
+
+The first plot shows a positive relationship between minimum and maximum temperature. When the minimum temperature is higher, the maximum temperature is usually higher too.I also notice a few points that are far away from most of the data.
+
+In the second plot, most years have similar snowfall distributions. The median is around 25 mm in most years, but the spread is a little different. For example, the distribution in 2006 appears lower than in many other years. Overall, there is no clear trend in the distribution of snowfall values between 0 and 100 mm over time.
+
+# Problem 2
+```{r}
+nhanes_covar = read_csv("data/nhanes_covar.csv", skip = 4)
+nhanes_accel = read_csv("data/nhanes_accel.csv")
+
+dim(nhanes_covar)
+dim(nhanes_accel)
+
+glimpse(nhanes_covar)
+
+names(nhanes_accel)[1:15]
+```
+
+```{r}
+nhanes_covar_clean = nhanes_covar |>
+  filter(
+    age >= 21,
+    !is.na(sex),
+    !is.na(BMI),
+    !is.na(education)
+  ) |>
+  mutate(
+    sex = factor(
+      sex,
+      levels = c(1, 2),
+      labels = c("Male", "Female")
+    ),
+    education = factor(
+      education,
+      levels = c(1, 2, 3),
+      labels = c(
+        "Less than high school",
+        "High school equivalent",
+        "More than high school"
+      )
+    )
+  )
+
+dim(nhanes_covar_clean)
+
+glimpse(nhanes_covar_clean)
+
+table(nhanes_covar_clean$sex,
+      nhanes_covar_clean$education)
+```
+
+```{r}
+nhanes_df = nhanes_covar_clean |>
+  left_join(nhanes_accel, by = "SEQN") |>
+  pivot_longer(
+    cols = min1:min1440,
+    names_to = "minute",
+    names_prefix = "min",
+    values_to = "mims"
+  ) |>
+  mutate(
+    minute = as.numeric(minute)
+  )
+
+dim(nhanes_df)
+glimpse(nhanes_df)
+head(nhanes_df)
+```
+
+```{r}
+nhanes_covar_clean |>
+  count(education, sex) |>
+  pivot_wider(
+    names_from = sex,
+    values_from = n
+  ) |>
+  knitr::kable(
+    caption = "Number of Participants by Education and Sex"
+  )
+```
+
+```{r fig.width=10, fig.height=5}
+nhanes_covar_clean |>
+  ggplot(aes(x = age, fill = sex)) +
+  geom_density(alpha = 0.4) +
+  facet_grid(. ~ education) +
+  labs(
+    title = "Age DIstribution by Education and Sex",
+    x = "Age",
+    fill = "Sex"
+  ) +
+  theme_minimal()
+```
+
+The table shows that the group with more than high school education has the largest number of participants (115). There are 118 men and 110 women in total, so the number are pretty close. The high school equivalent group has more men than women.
+
+People in the less than high school group seem to be older. In the more than high school group, there is a peak around age 30, especially for women. In the high school equivalent group, women appear more concentrated at older ages than men.
+
+```{r}
+activity_df = nhanes_df |>
+  group_by(SEQN, sex, age, education) |>
+  summarize(
+    total_activity = sum(mims, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+dim(activity_df)
+glimpse(activity_df)
+head(activity_df)
+```
+
+```{r fig.width=10, fig.height=5}
+activity_df |>
+  ggplot(aes(x = age, y = total_activity, color = sex)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(se = FALSE) +
+  facet_grid(. ~ education) +
+  labs(
+    title = "Total Activity by Age, Sex, and Education",
+    x = "Age",
+    y = "Total Activity (MIMS)",
+    color = "Sex"
+  ) +
+  theme_minimal()
+```
+
+The plot shows that total activity generally decreases with age across all three education groups. In the less than high school group, both men and women show a noticeable decline at older ages. In the high school equivalent group, women's activity seems to reach a peak around age 40 and then decreases. In the more than high school group, activity levels are relatively stable at younger and middle ages, but decrease among older participants. I don't see the same difference between men and wmen inevery education group.
+
+```{r}
+activity_time_df = nhanes_df |>
+  group_by(education, sex, minute) |>
+  summarize(
+    mean_mims = mean(mims, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(
+    hour = (minute - 1) / 60
+  )
+
+dim(activity_time_df)
+glimpse(activity_time_df)
+head(activity_time_df)
+```
+
+```{r fig.width=12, fig.height=5}
+activity_time_df |>
+  ggplot(aes(x = hour, y = mean_mims, color = sex)) +
+  geom_line(alpha = 0.3) +
+  geom_smooth(se = FALSE) +
+  facet_grid(. ~ education) +
+  labs(
+    title = "24 Hours Activity Patterns by Education and Sex",
+    x = "Hours of the Day",
+    y = "Average MIMS",
+    color = "sex"
+  ) +
+  theme_minimal()
+```
+
+The plot shows a similar daily activity pattern across all three education groups. Activity levels are lowest during the early morning, around 3 to 5 AM, and then increase quickly in the morning. They remain relatively high during the day and gradually decrease in the evening.
+
+Women generally have slightly higher average activity levels than men during the daytime, especially in the high school equivalent and more than high school groups. In the less than high school group, activity peaks in the late morning and then gradually decreases. The other two groups stay at relatively high activity levels for more hours during the day.
